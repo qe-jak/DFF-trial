@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Repo Market Rates – Fee Space (Spread over DFF)</title>
+
+  <!-- Plotly.js for interactive charts -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <!-- PapaParse for CSV parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #f8f9fa;
+      --card: #ffffff;
+      --border: #dee2e6;
+      --text: #212529;
+      --muted: #6c757d;
+      --accent: #0d6efd;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 1.5rem 2rem;
+      text-align: center;
+    }
+    header h1 { font-size: 1.6rem; font-weight: 700; }
+    header p  { color: #adb5bd; font-size: 0.9rem; margin-top: 0.3rem; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+
+    /* Tab navigation */
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0.5rem;
+    }
+    .tab-btn {
+      padding: 0.5rem 1.2rem;
+      border: 1px solid var(--border);
+      border-radius: 6px 6px 0 0;
+      background: var(--card);
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); border-color: var(--accent); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-color: var(--accent);
+      border-bottom-color: var(--bg);
+      font-weight: 600;
+    }
+
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .chart-card h2 {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+    .chart-container { width: 100%; }
+    .hidden { display: none; }
+
+    .legend-info {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.5rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Repo Market Rates &ndash; Fee Space</h1>
+  <p>Daily spreads over the Fed Funds Rate (DFF) &bull; Cantor / BNP Data</p>
+</header>
+
+<div class="container">
+  <div class="legend-info">
+    <strong>Fee Space</strong> = Observed Rate &minus; Daily Fed Funds (DFF) Rate, displayed in
+    <strong>basis points</strong>. A positive spread means the rate trades above DFF;
+    a negative spread means the rate trades below (i.e., "special").
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="by-series">By Series</button>
+    <button class="tab-btn" data-tab="by-maturity">By Maturity</button>
+    <button class="tab-btn" data-tab="all-base">All Base Rates</button>
+    <button class="tab-btn" data-tab="dff-overlay">DFF Overlay</button>
+  </div>
+
+  <!-- TAB: By Series (4 charts) -->
+  <div id="panel-by-series" class="tab-panel">
+    <div class="chart-card"><h2>Base Repo Rates (GC, 2Y–30Y) – Spread over DFF</h2>
+      <div id="chart-base" class="chart-container"></div></div>
+    <div class="chart-card"><h2>O‑Series Repo Rates – Spread over DFF</h2>
+      <div id="chart-o" class="chart-container"></div></div>
+    <div class="chart-card"><h2>OO‑Series Repo Rates – Spread over DFF</h2>
+      <div id="chart-oo" class="chart-container"></div></div>
+    <div class="chart-card"><h2>OOO‑Series Repo Rates – Spread over DFF</h2>
+      <div id="chart-ooo" class="chart-container"></div></div>
+  </div>
+
+  <!-- TAB: By Maturity -->
+  <div id="panel-by-maturity" class="tab-panel hidden">
+    <div class="chart-card"><h2>GC – All Series Spreads over DFF</h2>
+      <div id="chart-mat-gc" class="chart-container"></div></div>
+    <div class="chart-card"><h2>2Y – All Series Spreads over DFF</h2>
+      <div id="chart-mat-2y" class="chart-container"></div></div>
+    <div class="chart-card"><h2>3Y – All Series Spreads over DFF</h2>
+      <div id="chart-mat-3y" class="chart-container"></div></div>
+    <div class="chart-card"><h2>5Y – All Series Spreads over DFF</h2>
+      <div id="chart-mat-5y" class="chart-container"></div></div>
+    <div class="chart-card"><h2>7Y – All Series Spreads over DFF</h2>
+      <div id="chart-mat-7y" class="chart-container"></div></div>
+    <div class="chart-card"><h2>10Y – All Series Spreads over DFF</h2>
+      <div id="chart-mat-10y" class="chart-container"></div></div>
+    <div class="chart-card"><h2>20Y – All Series Spreads over DFF</h2>
+      <div id="chart-mat-20y" class="chart-container"></div></div>
+    <div class="chart-card"><h2>30Y – All Series Spreads over DFF</h2>
+      <div id="chart-mat-30y" class="chart-container"></div></div>
+  </div>
+
+  <!-- TAB: All Base Rates on one chart -->
+  <div id="panel-all-base" class="tab-panel hidden">
+    <div class="chart-card"><h2>All Base Rates – Spread over DFF</h2>
+      <div id="chart-all-base" class="chart-container"></div></div>
+  </div>
+
+  <!-- TAB: DFF Overlay -->
+  <div id="panel-dff-overlay" class="tab-panel hidden">
+    <div class="chart-card"><h2>Daily Fed Funds Rate (DFF) – Level</h2>
+      <div id="chart-dff" class="chart-container"></div></div>
+    <div class="chart-card"><h2>Base Rates &amp; DFF – Raw Levels</h2>
+      <div id="chart-raw" class="chart-container"></div></div>
+  </div>
+</div>
+
+<footer>
+  Data: Cantor / BNP Repo Market Data with DFF &bull; Generated from CSV
+</footer>
+
+<script>
+// ─── Constants ────────────────────────────────────────────────────
+const BASE_COLS = ["GC", "2Y", "3Y", "5Y", "7Y", "10Y", "20Y", "30Y"];
+const O_COLS    = ["O2Y", "O3Y", "O5Y", "O7Y", "O10Y", "O20Y", "O30Y"];
+const OO_COLS   = ["OO2Y", "OO3Y", "OO5Y", "OO7Y", "OO10Y", "OO20Y", "OO30Y"];
+const OOO_COLS  = ["OOO2Y", "OOO3Y", "OOO5Y", "OOO7Y", "OOO10Y", "OOO20Y", "OOO30Y"];
+
+const MATURITY_MAP = {
+  "gc":  { cols: ["GC"],  labels: ["Base GC"] },
+  "2y":  { cols: ["2Y", "O2Y", "OO2Y", "OOO2Y"],  labels: ["Base", "O", "OO", "OOO"] },
+  "3y":  { cols: ["3Y", "O3Y", "OO3Y", "OOO3Y"],  labels: ["Base", "O", "OO", "OOO"] },
+  "5y":  { cols: ["5Y", "O5Y", "OO5Y", "OOO5Y"],  labels: ["Base", "O", "OO", "OOO"] },
+  "7y":  { cols: ["7Y", "O7Y", "OO7Y", "OOO7Y"],  labels: ["Base", "O", "OO", "OOO"] },
+  "10y": { cols: ["10Y", "O10Y", "OO10Y", "OOO10Y"], labels: ["Base", "O", "OO", "OOO"] },
+  "20y": { cols: ["20Y", "O20Y", "OO20Y", "OOO20Y"], labels: ["Base", "O", "OO", "OOO"] },
+  "30y": { cols: ["30Y", "O30Y", "OO30Y", "OOO30Y"], labels: ["Base", "O", "OO", "OOO"] },
+};
+
+const PLOTLY_LAYOUT_DEFAULTS = {
+  height: 420,
+  margin: { t: 30, b: 60, l: 70, r: 30 },
+  xaxis: { title: "Date", type: "date" },
+  yaxis: { title: "Spread over DFF (bps)", zeroline: true, zerolinecolor: "#333", zerolinewidth: 1 },
+  hovermode: "x unified",
+  legend: { orientation: "h", y: -0.22, x: 0.5, xanchor: "center" },
+  template: "plotly_white",
+};
+
+const PLOTLY_CONFIG = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ["lasso2d", "select2d"] };
+
+// ─── Tab switching ─────────────────────────────────────────────────
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.add("hidden"));
+    btn.classList.add("active");
+    document.getElementById("panel-" + btn.dataset.tab).classList.remove("hidden");
+    // Resize all plotly charts in the visible panel
+    window.dispatchEvent(new Event("resize"));
+  });
+});
+
+// ─── Load CSV ──────────────────────────────────────────────────────
+Papa.parse("Cantor_BNP_Repo_Market_Data_with_DFF.csv", {
+  download: true,
+  header: true,
+  skipEmptyLines: true,
+  complete: function(results) {
+    const raw = results.data;
+    processAndRender(raw);
+  },
+  error: function(err) {
+    document.querySelector(".container").innerHTML =
+      '<p style="color:red;padding:2rem;">Error loading CSV: ' + err.message + '</p>';
+  }
+});
+
+// ─── Core logic ────────────────────────────────────────────────────
+function processAndRender(raw) {
+  // Parse dates and numeric values
+  const dates = [];
+  const dff   = [];
+  const series = {};  // col -> array of numbers|null
+
+  // Collect all non-time, non-DFF column names
+  const allCols = Object.keys(raw[0]).filter(c => c !== "time" && c !== "DFF");
+  allCols.forEach(c => { series[c] = []; });
+
+  raw.forEach(row => {
+    const d = row.time;
+    if (!d) return;
+    dates.push(d);
+
+    const dffVal = parseFloat(row.DFF);
+    dff.push(isNaN(dffVal) ? null : dffVal);
+
+    allCols.forEach(col => {
+      const v = parseFloat(row[col]);
+      series[col].push(isNaN(v) ? null : v);
+    });
+  });
+
+  // Compute spreads in basis points
+  const spreads = {};
+  allCols.forEach(col => {
+    spreads[col] = series[col].map((v, i) => {
+      if (v === null || dff[i] === null) return null;
+      return Math.round((v - dff[i]) * 100 * 100) / 100;  // keep 2 decimals in bps
+    });
+  });
+
+  // ── Render By-Series tab ──────────────────────
+  renderSpreadChart("chart-base", dates, spreads, BASE_COLS, BASE_COLS);
+  renderSpreadChart("chart-o",    dates, spreads, O_COLS, O_COLS);
+  renderSpreadChart("chart-oo",   dates, spreads, OO_COLS, OO_COLS);
+  renderSpreadChart("chart-ooo",  dates, spreads, OOO_COLS, OOO_COLS);
+
+  // ── Render By-Maturity tab ────────────────────
+  Object.entries(MATURITY_MAP).forEach(([key, info]) => {
+    renderSpreadChart("chart-mat-" + key, dates, spreads, info.cols, info.labels);
+  });
+
+  // ── Render All-Base tab ───────────────────────
+  renderSpreadChart("chart-all-base", dates, spreads, BASE_COLS, BASE_COLS);
+
+  // ── Render DFF Overlay tab ────────────────────
+  renderDFF("chart-dff", dates, dff);
+  renderRawWithDFF("chart-raw", dates, dff, series, BASE_COLS);
+}
+
+function renderSpreadChart(divId, dates, spreads, cols, labels) {
+  const traces = cols.map((col, i) => ({
+    x: dates,
+    y: spreads[col] || [],
+    name: labels[i],
+    type: "scatter",
+    mode: "lines",
+    line: { width: 1.8 },
+    connectgaps: false,
+    hovertemplate: "%{y:.1f} bps<extra>" + labels[i] + "</extra>",
+  }));
+
+  // Zero line reference
+  traces.push({
+    x: [dates[0], dates[dates.length - 1]],
+    y: [0, 0],
+    mode: "lines",
+    line: { color: "#333", width: 1, dash: "dash" },
+    showlegend: false,
+    hoverinfo: "skip",
+  });
+
+  Plotly.newPlot(divId, traces, { ...PLOTLY_LAYOUT_DEFAULTS }, PLOTLY_CONFIG);
+}
+
+function renderDFF(divId, dates, dff) {
+  const trace = {
+    x: dates,
+    y: dff,
+    name: "DFF",
+    type: "scatter",
+    mode: "lines+markers",
+    line: { width: 2, color: "#d63384" },
+    marker: { size: 4 },
+    hovertemplate: "%{y:.2f}%<extra>DFF</extra>",
+  };
+  const layout = {
+    ...PLOTLY_LAYOUT_DEFAULTS,
+    yaxis: { title: "DFF Rate (%)", zeroline: false },
+  };
+  Plotly.newPlot(divId, [trace], layout, PLOTLY_CONFIG);
+}
+
+function renderRawWithDFF(divId, dates, dff, series, cols) {
+  const traces = cols.map(col => ({
+    x: dates,
+    y: series[col],
+    name: col,
+    type: "scatter",
+    mode: "lines",
+    line: { width: 1.5 },
+    connectgaps: false,
+    hovertemplate: "%{y:.2f}%<extra>" + col + "</extra>",
+  }));
+
+  traces.push({
+    x: dates,
+    y: dff,
+    name: "DFF",
+    type: "scatter",
+    mode: "lines",
+    line: { width: 2.5, color: "#d63384", dash: "dash" },
+    hovertemplate: "%{y:.2f}%<extra>DFF</extra>",
+  });
+
+  const layout = {
+    ...PLOTLY_LAYOUT_DEFAULTS,
+    yaxis: { title: "Rate (%)", zeroline: false },
+  };
+  Plotly.newPlot(divId, traces, layout, PLOTLY_CONFIG);
+}
+</script>
+</body>
+</html>
